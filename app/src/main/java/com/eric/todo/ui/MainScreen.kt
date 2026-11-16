@@ -99,6 +99,7 @@ fun MainScreen(
     onDuplicates: () -> Unit,
     onSettings: () -> Unit,
     onShare: () -> Unit,
+    onTextSize: (Int) -> Unit,
     snackbar: SnackbarHostState,
 ) {
     val context = LocalContext.current
@@ -114,6 +115,12 @@ fun MainScreen(
     var editing by remember { mutableStateOf<Task?>(null) }
     var showDone by rememberSaveable { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
+
+    // Smaller text = tighter rows, so more of the list fits on screen.
+    val ts = LocalTextSize.current
+    val rowMin = (ts * 3.1f).coerceIn(44f, 76f).dp
+    val gap = if (ts < 20) 5.dp else 10.dp
+    val handlePad = if (ts < 20) 6.dp else 16.dp
 
     val listState = rememberLazyListState()
     val reorderState = rememberReorderableLazyListState(listState) { from, to ->
@@ -185,6 +192,8 @@ fun MainScreen(
                                 TaskStore.reorder(context, currentList,
                                     open.filter { it.urgent }.map { it.id } + open.filter { !it.urgent }.map { it.id })
                             }
+                            BigMenuItem("Smaller text (see more)") { menu = false; onTextSize(-1) }
+                            BigMenuItem("Bigger text") { menu = false; onTextSize(1) }
                             BigMenuItem("Settings") { menu = false; onSettings() }
                         }
                     }
@@ -233,7 +242,7 @@ fun MainScreen(
             LazyColumn(
                 state = listState,
                 contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(gap),
                 modifier = Modifier.weight(1f),
             ) {
                 if (open.isEmpty()) {
@@ -270,7 +279,7 @@ fun MainScreen(
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest),
                         ) {
                             Row(
-                                Modifier.heightIn(min = 76.dp).padding(start = 4.dp, end = 0.dp, top = 6.dp, bottom = 6.dp),
+                                Modifier.heightIn(min = rowMin).padding(start = 4.dp, end = 0.dp, top = if (ts < 20) 2.dp else 6.dp, bottom = if (ts < 20) 2.dp else 6.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 // Drag handle: touch and drag right away
@@ -283,8 +292,8 @@ fun MainScreen(
                                             onDragStarted = { haptic.performHapticFeedback(HapticFeedbackType.LongPress) },
                                             onDragStopped = { TaskStore.reorder(context, currentList, open.map { it.id }) },
                                         )
-                                        .padding(horizontal = 8.dp, vertical = 16.dp)
-                                        .size(28.dp),
+                                        .padding(horizontal = 8.dp, vertical = handlePad)
+                                        .size(if (ts < 20) 22.dp else 28.dp),
                                 )
                                 BigCheck(checked = false, color = listColor(currentList)) { complete(task) }
                                 Spacer(Modifier.width(12.dp))
@@ -386,15 +395,16 @@ private fun ListTabs(current: String, businessCount: Int, personalCount: Int, on
 
 @Composable
 fun BigCheck(checked: Boolean, color: Color, onClick: () -> Unit) {
+    val box = (LocalTextSize.current * 1.8f).coerceIn(30f, 44f)
     Box(
         Modifier
-            .size(44.dp)
+            .size(box.dp)
             .background(if (checked) color else Color.Transparent, CircleShape)
             .border(3.dp, color, CircleShape)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        if (checked) Icon(Icons.Default.Check, "Done", tint = Color.Black, modifier = Modifier.size(30.dp))
+        if (checked) Icon(Icons.Default.Check, "Done", tint = Color.Black, modifier = Modifier.size((box * 0.68f).dp))
     }
 }
 
@@ -406,20 +416,20 @@ fun CountBadge(count: Int) {
             .background(Orange, RoundedCornerShape(50))
             .padding(horizontal = 10.dp, vertical = 2.dp),
     ) {
-        Text("×$count", color = Color.Black, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+        Text("×$count", color = Color.Black, fontSize = (LocalTextSize.current * 0.75f).coerceIn(12f, 18f).sp, fontWeight = FontWeight.ExtraBold)
     }
 }
 
 @Composable
 private fun TaskLabel(task: Task, modifier: Modifier) {
-    Column(modifier.padding(vertical = 6.dp)) {
+    Column(modifier.padding(vertical = if (LocalTextSize.current < 20) 2.dp else 6.dp)) {
         Text(task.text, style = taskTextStyle(), color = MaterialTheme.colorScheme.onSurface)
         if (task.urgent || task.count > 1) {
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(if (LocalTextSize.current < 20) 3.dp else 6.dp))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (task.urgent) {
                     Box(Modifier.background(UrgentRed, RoundedCornerShape(50)).padding(horizontal = 10.dp, vertical = 2.dp)) {
-                        Text("URGENT", color = Color.Black, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
+                        Text("URGENT", color = Color.Black, fontSize = (LocalTextSize.current * 0.65f).coerceIn(11f, 15f).sp, fontWeight = FontWeight.ExtraBold)
                     }
                 }
                 CountBadge(task.count)
@@ -434,8 +444,9 @@ private fun TaskMenu(task: Task, onEdit: () -> Unit, onDelete: () -> Unit) {
     var open by remember { mutableStateOf(false) }
     val other = if (task.list == BUSINESS) PERSONAL else BUSINESS
     Box {
-        IconButton(onClick = { open = true }, modifier = Modifier.size(52.dp)) {
-            Icon(Icons.Default.MoreVert, "Options", Modifier.size(30.dp))
+        val compact = LocalTextSize.current < 20
+        IconButton(onClick = { open = true }, modifier = Modifier.size(if (compact) 40.dp else 52.dp)) {
+            Icon(Icons.Default.MoreVert, "Options", Modifier.size(if (compact) 24.dp else 30.dp))
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             BigMenuItem("Edit") { open = false; onEdit() }

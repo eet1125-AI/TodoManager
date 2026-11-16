@@ -52,7 +52,7 @@ class Settings private constructor(context: Context) {
     companion object {
         const val DEFAULT_MODEL = "gemini-3.8-flash"
         const val LITE_MODEL = "gemini-3.5-flash-lite"
-        val TEXT_SIZES = listOf(20 to "Large", 24 to "Extra large", 28 to "Huge", 32 to "Giant")
+        val TEXT_SIZES = listOf(14 to "Small", 16 to "Compact", 18 to "Medium", 20 to "Large", 24 to "Extra large", 28 to "Huge", 32 to "Giant")
 
         @Volatile private var instance: Settings? = null
         fun get(context: Context): Settings =

@@ -49,7 +49,7 @@ Long-press an empty spot on the home screen → **Widgets** → **Eric's To-Do**
 
 ## Settings
 
-Text size (Large → Giant), light or dark background, AI key and model, **Save backup / Restore** (tasks live only on the phone; uninstalling deletes them).
+Text size (Small → Giant; also "Smaller text / Bigger text" in the main ⋮ menu), light or dark background, AI key and model, **Save backup / Restore** (tasks live only on the phone; uninstalling deletes them).
 
 ## Project layout
 

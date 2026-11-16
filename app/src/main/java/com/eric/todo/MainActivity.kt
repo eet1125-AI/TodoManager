@@ -106,6 +106,17 @@ class MainActivity : ComponentActivity() {
                                     .putExtra(Intent.EXTRA_TEXT, TaskStore.shareText(currentList))
                                 startActivity(Intent.createChooser(send, "Share list"))
                             },
+                            onTextSize = { step ->
+                                val sizes = Settings.TEXT_SIZES.map { it.first }
+                                val i = sizes.indexOf(values.textSize).let { if (it < 0) sizes.indexOf(24) else it }
+                                val next = (i + step).coerceIn(0, sizes.lastIndex)
+                                settings.setTextSize(sizes[next])
+                                val label = Settings.TEXT_SIZES[next].second
+                                scope.launch {
+                                    snackbar.currentSnackbarData?.dismiss()
+                                    snackbar.showSnackbar(if (next == i) "Already at $label" else "Text size: $label")
+                                }
+                            },
                             snackbar = snackbar,
                         )
                     }

@@ -159,7 +159,7 @@ class TaskWidgetService : RemoteViewsService() {
         override fun onDataSetChanged() {
             val settings = Settings.get(context)
             items = TaskStore.open(context, settings.widgetList(widgetId))
-            textSize = (settings.values.value.textSize - 2).coerceIn(18, 30).toFloat()
+            textSize = (settings.values.value.textSize - 2).coerceIn(12, 30).toFloat()
         }
         override fun onDestroy() = Unit
         override fun getCount() = items.size
