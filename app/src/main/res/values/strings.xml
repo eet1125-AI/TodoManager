@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">Eric\'s To-Do</string>
+    <string name="share_label">Add to To-Do</string>
+    <string name="widget_label">To-Do list</string>
+    <string name="widget_description">Your Business and Personal to-do lists. Resize to fill the screen.</string>
+</resources>
