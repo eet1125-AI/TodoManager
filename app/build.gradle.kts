@@ -17,6 +17,9 @@ android {
         targetSdk = 35
         versionCode = buildNumber
         versionName = "$buildNumber"
+
+        // Modern phones (Samsung Galaxy, Pixel) only: keeps the download small.
+        ndk { abiFilters += "arm64-v8a" }
     }
 
     // One fixed signing key so new builds install over old ones and keep your tasks.
