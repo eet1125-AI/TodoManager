@@ -4,7 +4,7 @@ One place for all your tasks: two lists (Business and Personal), big clear text,
 
 Feed it old lists by **taking a picture**, **choosing photos/screenshots**, **pasting**, or **sharing from Voice Log**. It finds the tasks, files them under Business or Personal, and catches repeats: a repeat gets merged into the task you already have and shows a count (**×2**, **×3**…). It always asks before merging.
 
-No account, no subscription. Tasks stay on the phone. Android 10 or newer.
+No account, no subscription. Tasks stay on the phone, and can sync between your phone and tablet through your own Google Drive. Android 10 or newer.
 
 ## Install / update
 
@@ -33,9 +33,17 @@ On your phone open **https://github.com/eet1125-AI/TodoManager/releases/latest**
    - **Merge all repeats** / **Keep all as new** set every repeat at once.
 4. Tap **Add N to my lists**.
 
-**From Voice Log:** open a to-do list (or the Master list) → Share → **Add to To-Do**. It goes straight to the check screen.
+**From Voice Log:** open a project's to-do list → **Send to To-Do**. It goes straight to the check screen.
 
 The reader understands checkboxes (☐ ☑ [ ] [x]), bullets, numbering, "– URGENT", and headings like BUSINESS TASKS / PERSONAL TASKS. Checked-off items are marked and skipped by default.
+
+## Sync phone and tablet (Google Drive)
+
+1. **First device:** tap the **sync** icon (two arrows, top bar) → **First device: create the sync file**. In the file screen tap ☰ → **Drive**, then **Save**. This makes `Eric-ToDo-sync.json` in your Drive.
+2. **Each other device:** install the app, tap the sync icon → **Already set up on another device: choose the file** → ☰ → **Drive** → tap `Eric-ToDo-sync.json`.
+3. From then on, tap **sync** on any device (it also syncs when you open the app). Changes from every device are merged: new tasks are added, the newest edit or checkmark wins, deleted tasks disappear everywhere, and the most recent drag-to-reorder sets the order.
+
+Each device keeps its own copy, so the app works offline; sync when you're back online. Settings → Google Drive sync shows the last sync time and has **Choose file again** / **Stop syncing**.
 
 ## AI helper (optional, Google Gemini)
 
@@ -49,7 +57,7 @@ Long-press an empty spot on the home screen → **Widgets** → **Eric's To-Do**
 
 ## Settings
 
-Text size (Small → Giant; also "Smaller text / Bigger text" in the main ⋮ menu), light or dark background, AI key and model, **Save backup / Restore** (tasks live only on the phone; uninstalling deletes them).
+Text size (Small → Giant; also "Smaller text / Bigger text" in the main ⋮ menu), light or dark background, AI key and model, **Google Drive sync**, **Save backup / Restore** (without sync, tasks live only on the phone; uninstalling deletes them).
 
 ## Project layout
 
@@ -58,6 +66,8 @@ app/src/main/java/com/eric/todo/
   MainActivity.kt          screens, share-in from other apps
   AppViewModel.kt          import: read text/photos, AI, build the check list
   data/TaskStore.kt        tasks.json storage, merge, reorder, undo
+  data/SyncMerge.kt        how phone + tablet changes are combined (tested in app/src/test)
+  sync/DriveSync.kt        reads/writes the shared file in Google Drive
   data/Settings.kt         settings
   importer/TextParser.kt   turns pasted/OCR text into tasks
   importer/Dupes.kt        "same task?" matching

@@ -30,6 +30,19 @@ import com.eric.todo.ui.MainScreen
 import com.eric.todo.ui.SettingsScreen
 import com.eric.todo.ui.TodoTheme
 import kotlinx.coroutines.launch
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import com.eric.todo.sync.DriveSync
 
 class MainActivity : ComponentActivity() {
 
@@ -41,6 +54,13 @@ class MainActivity : ComponentActivity() {
     private val vm: AppViewModel by viewModels()
     private val pendingList = mutableStateOf<String?>(null)
     private val pendingImport = mutableStateOf(false)
+    private val openedTick = mutableStateOf(0)
+    private var lastAutoSync = 0L
+
+    override fun onStart() {
+        super.onStart()
+        openedTick.value++
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -59,6 +79,67 @@ class MainActivity : ComponentActivity() {
             val snackbar = remember { SnackbarHostState() }
             val scope = rememberCoroutineScope()
             val currentList = values.lastList
+            var syncing by remember { mutableStateOf(false) }
+            var showSyncSetup by remember { mutableStateOf(false) }
+
+            fun runSync(quiet: Boolean = false) {
+                if (syncing) return
+                syncing = true
+                scope.launch {
+                    val result = runCatching { DriveSync.sync(this@MainActivity) }
+                    syncing = false
+                    result.onSuccess { r ->
+                        if (!quiet || r.added + r.updated + r.removed > 0) {
+                            snackbar.currentSnackbarData?.dismiss()
+                            snackbar.showSnackbar(r.message)
+                        }
+                    }.onFailure { e ->
+                        snackbar.currentSnackbarData?.dismiss()
+                        snackbar.showSnackbar("Sync failed: ${e.message ?: "no connection"}")
+                    }
+                }
+            }
+            fun syncOrSetUp() { if (DriveSync.isSetUp(this@MainActivity)) runSync() else showSyncSetup = true }
+
+            val createSyncFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+                if (uri != null) { DriveSync.connect(this@MainActivity, uri); runSync() }
+            }
+            val openSyncFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+                if (uri != null) { DriveSync.connect(this@MainActivity, uri); runSync() }
+            }
+
+            // Sync automatically when the app is opened (at most once a minute).
+            val opened by openedTick
+            LaunchedEffect(opened) {
+                val now = System.currentTimeMillis()
+                if (values.autoSync && DriveSync.isSetUp(this@MainActivity) && now - lastAutoSync > 60_000) {
+                    lastAutoSync = now
+                    runSync(quiet = true)
+                }
+            }
+
+            if (showSyncSetup) {
+                AlertDialog(
+                    onDismissRequest = { showSyncSetup = false },
+                    title = { Text("Sync with Google Drive") },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text("Your list is kept in one file in your Google Drive. Every phone and tablet uses the same file. Tap Sync on any device to send and get changes.")
+                            Text("On the next screen, tap ☰ (top left) and choose Drive, then save or pick the file there.")
+                            Button(
+                                onClick = { showSyncSetup = false; createSyncFile.launch(DriveSync.FILE_NAME) },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) { Text("First device: create the sync file") }
+                            OutlinedButton(
+                                onClick = { showSyncSetup = false; openSyncFile.launch(arrayOf("application/json", "application/octet-stream", "text/plain", "*/*")) },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) { Text("Already set up on another device: choose the file") }
+                        }
+                    },
+                    confirmButton = {},
+                    dismissButton = { TextButton(onClick = { showSyncSetup = false }) { Text("Cancel") } },
+                )
+            }
 
             LaunchedEffect(openImport) {
                 if (openImport) { screen = "import"; vm.importOpened() }
@@ -92,7 +173,15 @@ class MainActivity : ComponentActivity() {
                             },
                         )
                         "duplicates" -> DuplicatesScreen(tasks, currentList, onBack = { screen = "main" })
-                        "settings" -> SettingsScreen(values, settings, keyCheck, onTestKey = { vm.testKey() }, onBack = { screen = "main" })
+                        "settings" -> SettingsScreen(
+                            values, settings, keyCheck,
+                            onTestKey = { vm.testKey() },
+                            onSyncNow = { syncOrSetUp() },
+                            onSyncSetup = { showSyncSetup = true },
+                            onSyncStop = { DriveSync.disconnect(this@MainActivity) },
+                            syncing = syncing,
+                            onBack = { screen = "main" },
+                        )
                         else -> MainScreen(
                             tasks = tasks,
                             currentList = currentList,
@@ -117,6 +206,8 @@ class MainActivity : ComponentActivity() {
                                     snackbar.showSnackbar(if (next == i) "Already at $label" else "Text size: $label")
                                 }
                             },
+                            onSync = { syncOrSetUp() },
+                            syncing = syncing,
                             snackbar = snackbar,
                         )
                     }

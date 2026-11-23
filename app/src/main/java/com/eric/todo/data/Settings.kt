@@ -15,6 +15,10 @@ class Settings private constructor(context: Context) {
         val geminiModel: String,
         val useAi: Boolean,       // use AI for imports when a key is set
         val lastList: String,
+        val syncUri: String,       // Google Drive sync file ("" = not set up)
+        val syncName: String,
+        val lastSync: Long,
+        val autoSync: Boolean,     // sync when the app opens
     )
 
     private val prefs = context.applicationContext.getSharedPreferences("settings", Context.MODE_PRIVATE)
@@ -29,6 +33,10 @@ class Settings private constructor(context: Context) {
         geminiModel = prefs.getString("gemini_model", DEFAULT_MODEL) ?: DEFAULT_MODEL,
         useAi = prefs.getBoolean("use_ai", true),
         lastList = prefs.getString("last_list", BUSINESS) ?: BUSINESS,
+        syncUri = prefs.getString("sync_uri", "") ?: "",
+        syncName = prefs.getString("sync_name", "") ?: "",
+        lastSync = prefs.getLong("last_sync", 0),
+        autoSync = prefs.getBoolean("auto_sync", true),
     )
 
     private fun edit(block: android.content.SharedPreferences.Editor.() -> Unit) {
@@ -42,6 +50,9 @@ class Settings private constructor(context: Context) {
     fun setGeminiModel(model: String) = edit { putString("gemini_model", model.trim()) }
     fun setUseAi(on: Boolean) = edit { putBoolean("use_ai", on) }
     fun setLastList(list: String) = edit { putString("last_list", list) }
+    fun setSync(uri: String, name: String) = edit { putString("sync_uri", uri); putString("sync_name", name) }
+    fun setLastSync(time: Long) = edit { putLong("last_sync", time) }
+    fun setAutoSync(on: Boolean) = edit { putBoolean("auto_sync", on) }
 
     /** Which list each home-screen widget shows. */
     fun widgetList(widgetId: Int): String = prefs.getString("widget_list_$widgetId", BUSINESS) ?: BUSINESS

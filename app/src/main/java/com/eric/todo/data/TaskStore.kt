@@ -23,6 +23,7 @@ data class Task(
     val urgent: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),
     val doneAt: Long = 0,
+    val updatedAt: Long = 0,   // last change on any device (for Drive sync); 0 = never changed since created
 )
 
 /** What an import should do with one incoming task. */
@@ -38,6 +39,8 @@ sealed interface ImportAction {
 object TaskStore {
 
     private var file: File? = null
+    private var deleted: Map<String, Long> = emptyMap()   // task id -> when it was deleted (so sync removes it everywhere)
+    private var orderChangedAt: Long = 0                   // last drag/move (so sync keeps the newest order)
     private val _tasks = MutableStateFlow<List<Task>>(emptyList())
     val tasks: StateFlow<List<Task>> = _tasks.asStateFlow()
 
@@ -46,7 +49,10 @@ object TaskStore {
         if (file != null) return
         val f = File(context.applicationContext.filesDir, "tasks.json")
         file = f
-        _tasks.value = runCatching { parse(f.readText()) }.getOrDefault(emptyList())
+        val state = runCatching { parseState(f.readText()) }.getOrNull()
+        _tasks.value = state?.tasks ?: emptyList()
+        deleted = state?.deleted ?: emptyMap()
+        orderChangedAt = state?.orderChangedAt ?: 0
     }
 
     fun all(context: Context): List<Task> {
@@ -60,19 +66,63 @@ object TaskStore {
     @Synchronized
     private fun update(context: Context, transform: (List<Task>) -> List<Task>) {
         init(context)
-        val next = transform(_tasks.value)
-        // Open tasks keep their order; done tasks go after, most recently done first.
-        val ordered = next.filter { !it.done } + next.filter { it.done }.sortedByDescending { it.doneAt }
-        val f = file!!
-        val tmp = File(f.parentFile, f.name + ".part")
-        tmp.writeText(toJson(ordered))
-        if (!tmp.renameTo(f)) {
-            f.writeText(toJson(ordered))
-            tmp.delete()
+        val prev = _tasks.value
+        val next = transform(prev)
+        val now = System.currentTimeMillis()
+
+        // Stamp every task that changed, remember deletions and order changes, for Drive sync.
+        val prevById = prev.associateBy { it.id }
+        val stamped = next.map { t ->
+            val p = prevById[t.id]
+            if (p == null || p.copy(updatedAt = 0) != t.copy(updatedAt = 0)) t.copy(updatedAt = now) else t
         }
+        val nextIds = stamped.map { it.id }.toSet()
+        val removed = prev.filter { it.id !in nextIds }.map { it.id }
+        deleted = SyncMerge.prune((deleted - nextIds) + removed.associateWith { now }, now)
+
+        // Open tasks keep their order; done tasks go after, most recently done first.
+        val ordered = stamped.filter { !it.done } + stamped.filter { it.done }.sortedByDescending { it.doneAt }
+        val prevOrder = prev.filter { !it.done && it.id in nextIds }.map { it.id }
+        val nextOrder = ordered.filter { !it.done && it.id in prevById }.map { it.id }
+        if (prevOrder != nextOrder) orderChangedAt = now
+
+        save(ordered)
         _tasks.value = ordered
         runCatching { TaskWidget.refresh(context.applicationContext) }
     }
+
+    private fun save(list: List<Task>) {
+        val f = file!!
+        val json = toJson(list, deleted, orderChangedAt)
+        val tmp = File(f.parentFile, f.name + ".part")
+        tmp.writeText(json)
+        if (!tmp.renameTo(f)) {
+            f.writeText(json)
+            tmp.delete()
+        }
+    }
+
+    // ---- Drive sync -------------------------------------------------------
+
+    @Synchronized
+    fun syncState(context: Context): SyncState {
+        init(context)
+        return SyncState(_tasks.value, deleted, orderChangedAt)
+    }
+
+    /** Saves the merged result of a sync as-is (no new change stamps). */
+    @Synchronized
+    fun applySync(context: Context, state: SyncState) {
+        init(context)
+        val ordered = state.tasks.filter { !it.done } + state.tasks.filter { it.done }.sortedByDescending { it.doneAt }
+        deleted = state.deleted
+        orderChangedAt = state.orderChangedAt
+        save(ordered)
+        _tasks.value = ordered
+        runCatching { TaskWidget.refresh(context.applicationContext) }
+    }
+
+    fun stateJson(state: SyncState): String = toJson(state.tasks, state.deleted, state.orderChangedAt)
 
     fun add(context: Context, text: String, list: String, urgent: Boolean = false) {
         val t = cleanText(text)
@@ -184,9 +234,9 @@ object TaskStore {
 
     // ---- Backup ---------------------------------------------------------
 
-    fun backupJson(): String = toJson(_tasks.value)
+    fun backupJson(): String = toJson(_tasks.value, deleted, orderChangedAt)
 
-    fun parseBackup(text: String): List<Task> = parse(text)
+    fun parseBackup(text: String): List<Task> = parseState(text).tasks
 
     // ---------------------------------------------------------------------
 
@@ -194,8 +244,19 @@ object TaskStore {
 
     fun cleanText(s: String) = s.trim().replace(Regex("\\s+"), " ")
 
-    private fun parse(text: String): List<Task> {
-        val arr = JSONObject(text).optJSONArray("tasks") ?: JSONArray()
+    /** Reads tasks.json, a backup, or the Drive sync file (all the same format). */
+    fun parseState(text: String): SyncState {
+        val root = JSONObject(text)
+        require(root.has("tasks")) { "Not a To-Do file" }
+        val del = root.optJSONObject("deleted")
+        val deletedMap = buildMap {
+            del?.keys()?.forEach { k -> put(k, del.optLong(k)) }
+        }
+        return SyncState(parse(root), deletedMap, root.optLong("order_changed_at"))
+    }
+
+    private fun parse(root: JSONObject): List<Task> {
+        val arr = root.optJSONArray("tasks") ?: JSONArray()
         return (0 until arr.length()).map { i ->
             val o = arr.getJSONObject(i)
             Task(
@@ -207,13 +268,16 @@ object TaskStore {
                 urgent = o.optBoolean("urgent"),
                 createdAt = o.optLong("created_at"),
                 doneAt = o.optLong("done_at"),
+                updatedAt = o.optLong("updated_at"),
             )
         }.filter { it.text.isNotBlank() }
     }
 
-    private fun toJson(list: List<Task>): String = JSONObject()
+    private fun toJson(list: List<Task>, deleted: Map<String, Long>, orderChangedAt: Long): String = JSONObject()
         .put("app", "Eric's To-Do")
-        .put("version", 1)
+        .put("version", 2)
+        .put("order_changed_at", orderChangedAt)
+        .put("deleted", JSONObject().apply { deleted.forEach { (k, v) -> put(k, v) } })
         .put("tasks", JSONArray().apply {
             list.forEach {
                 put(JSONObject()
@@ -224,7 +288,8 @@ object TaskStore {
                     .put("count", it.count)
                     .put("urgent", it.urgent)
                     .put("created_at", it.createdAt)
-                    .put("done_at", it.doneAt))
+                    .put("done_at", it.doneAt)
+                    .put("updated_at", it.updatedAt))
             }
         }).toString(2)
 }
