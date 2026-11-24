@@ -64,6 +64,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null) com.eric.todo.update.AppUpdater.checkOnStart(this)
         enableEdgeToEdge()
         TaskStore.init(this)
         val settings = Settings.get(this)

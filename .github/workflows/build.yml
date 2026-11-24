@@ -45,3 +45,18 @@ jobs:
           body: "Open this page on your phone and tap **ToDo.apk** to install or update. Version ${{ github.run_number }}."
           files: ToDo.apk
           make_latest: true
+
+      # One-button updates: copy this build to the public armsco-updates repository.
+      # Skipped until the UPDATES_TOKEN secret is added.
+      - name: Publish for in-app updates
+        env:
+          UPDATES_TOKEN: ${{ secrets.UPDATES_TOKEN }}
+        run: |
+          if [ -z "$UPDATES_TOKEN" ]; then echo "UPDATES_TOKEN not set - skipping in-app update publish"; exit 0; fi
+          export GH_TOKEN="$UPDATES_TOKEN"
+          R=eet1125-AI/armsco-updates
+          printf '{"versionCode": %s, "versionName": "%s", "notes": "", "apk": "ToDo.apk"}\n' "$GITHUB_RUN_NUMBER" "$GITHUB_RUN_NUMBER" > version.json
+          cat version.json
+          gh release view todo -R "$R" >/dev/null 2>&1 || gh release create todo -R "$R" --title "Eric's To-Do" --notes "In-app updates for To-Do. Latest: version.json"
+          gh release upload todo ToDo.apk -R "$R" --clobber
+          gh release upload todo version.json -R "$R" --clobber

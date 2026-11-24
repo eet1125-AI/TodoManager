@@ -238,6 +238,18 @@ fun SettingsScreen(
             }
 
             HorizontalDivider()
+            Section("App updates")
+            Text(
+                "Version " + (runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "?") +
+                    ". The app checks for updates each time it opens.",
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            OutlinedButton(
+                onClick = { (context as? android.app.Activity)?.let { com.eric.todo.update.AppUpdater.checkNow(it) } },
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+            ) { Text("Check for updates", fontSize = 17.sp) }
+
+            HorizontalDivider()
             Section("Backup")
             Text(
                 "Tasks live only on this phone. Uninstalling the app deletes them, so save a backup now and then.",
