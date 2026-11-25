@@ -61,7 +61,31 @@ object CloudSync {
     val email: StateFlow<String?> = _email.asStateFlow()
 
     private val auth get() = FirebaseAuth.getInstance()
-    private val db get() = FirebaseFirestore.getInstance()
+    // The database may be named "(default)" or "default" depending on how it was created in Firebase.
+    @Volatile private var dbId = "(default)"
+    private val db: FirebaseFirestore
+        get() = if (dbId == "(default)") FirebaseFirestore.getInstance()
+                else FirebaseFirestore.getInstance(FirebaseApp.getInstance(), dbId)
+
+    private fun isMissingDatabase(e: Throwable?): Boolean {
+        var t = e
+        while (t != null) {
+            val code = (t as? com.google.firebase.firestore.FirebaseFirestoreException)?.code
+            val m = t.message.orEmpty()
+            if (code == com.google.firebase.firestore.FirebaseFirestoreException.Code.NOT_FOUND && m.contains("database", true)) return true
+            if (m.contains("database", true) && (m.contains("does not exist", true) || m.contains("not found", true))) return true
+            t = t.cause
+        }
+        return false
+    }
+
+    /** Switches to the other database name. Returns false if both were tried. */
+    private fun tryOtherDatabase(): Boolean {
+        if (dbId != "(default)") return false
+        dbId = "default"
+        appContext.getSharedPreferences("cloud", Context.MODE_PRIVATE).edit().putString("db_id", dbId).apply()
+        return true
+    }
 
     /** Call once when the app starts. */
     @Synchronized
@@ -74,6 +98,7 @@ object CloudSync {
             return
         }
         ready = true
+        dbId = appContext.getSharedPreferences("cloud", Context.MODE_PRIVATE).getString("db_id", "(default)") ?: "(default)"
         TaskStore.onLocalChange = { schedulePush() }
         auth.addAuthStateListener { a ->
             val user = a.currentUser
@@ -140,6 +165,10 @@ object CloudSync {
         needsPush = true   // first time on this device: send what it has
         listener = doc(uid).addSnapshotListener(MetadataChanges.INCLUDE) { snap, err ->
             if (err != null) {
+                if (isMissingDatabase(err) && tryOtherDatabase()) {
+                    startListening(uid)
+                    return@addSnapshotListener
+                }
                 _status.value = Status.Error(friendly(err))
                 return@addSnapshotListener
             }
@@ -215,6 +244,10 @@ object CloudSync {
             null
         } catch (e: Exception) {
             needsPush = true
+            if (isMissingDatabase(e) && tryOtherDatabase()) {
+                auth.currentUser?.uid?.let { startListening(it) }
+                return@withLock null
+            }
             val msg = friendly(e)
             _status.value = if (e is FirebaseNetworkException || msg.contains("offline", true) || msg.contains("unavailable", true))
                 Status.Offline("Offline. Changes will sync when you're back online.")
