@@ -12,6 +12,7 @@ data class SyncState(
  * Rules:
  *  - A task changed on both devices: the newest change wins.
  *  - A task deleted on one device is deleted everywhere, unless it was changed again after the delete.
+ *  - Ties (same time on both) always go to the shared online copy, so every device ends up identical.
  *  - Order: the device that rearranged its list most recently decides the order; tasks the other device
  *    added since then go on top (new tasks always go on top).
  */
@@ -34,7 +35,7 @@ object SyncMerge {
             val pick = when {
                 l == null -> r
                 r == null -> l
-                stamp(r) > stamp(l) -> r
+                stamp(r) >= stamp(l) -> r   // tie: the shared copy wins
                 else -> l
             } ?: continue
             val deletedAt = deleted[id]
@@ -43,7 +44,7 @@ object SyncMerge {
             deleted.remove(id)   // changed after the delete: it lives
         }
 
-        val base = if (remote.orderChangedAt > local.orderChangedAt) remote.tasks else local.tasks
+        val base = if (remote.orderChangedAt >= local.orderChangedAt) remote.tasks else local.tasks   // tie: shared order
         val baseIds = base.map { it.id }.filter { it in chosen }
         val inBase = baseIds.toHashSet()
         val newOnes = chosen.values.filter { it.id !in inBase }.sortedByDescending { it.createdAt }

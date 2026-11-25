@@ -73,6 +73,31 @@ class SyncMergeTest {
         assertEquals(once, twice)
     }
 
+    @Test fun sameOrderTimeUsesSharedOrder() {
+        val phone = s(t("a"), t("b"), t("c"), order = 100)
+        val shared = s(t("c"), t("a"), t("b"), order = 100)
+        assertEquals(listOf("c", "a", "b"), SyncMerge.merge(phone, shared, now).tasks.map { it.id })
+    }
+
+    @Test fun phoneAndTabletEndUpIdenticalWithNoLoop() {
+        // Both devices start with the same tasks in different orders and the same timestamps.
+        var phone = s(t("a"), t("b"), t("c"), order = 100)
+        var tablet = s(t("c"), t("b"), t("a"), order = 100)
+        var cloud = s()
+        var writes = 0
+        repeat(6) {
+            for (which in 0..1) {
+                val local = if (which == 0) phone else tablet
+                val merged = SyncMerge.merge(local, cloud, now)
+                if (merged != cloud) { cloud = merged; writes++ }
+                if (which == 0) phone = merged else tablet = merged
+            }
+        }
+        assertEquals(phone.tasks.map { it.id }, tablet.tasks.map { it.id })
+        assertEquals(phone, cloud)
+        assertTrue("too many writes: $writes", writes <= 1)
+    }
+
     @Test fun oldDeletionsAreForgotten() {
         val old = now - 200L * 24 * 60 * 60 * 1000
         val m = SyncMerge.merge(s(deleted = mapOf("a" to old)), s(), now)

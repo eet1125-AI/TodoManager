@@ -197,8 +197,21 @@ object CloudSync {
         pushJob?.cancel()
     }
 
+    private val recentPushes = ArrayDeque<Long>()
+
     private fun schedulePush(delayMs: Long = 800) {
         if (!isSignedIn) return
+        // Safety: never let two devices bounce changes back and forth forever.
+        val now = System.currentTimeMillis()
+        synchronized(recentPushes) {
+            while (recentPushes.isNotEmpty() && now - recentPushes.first() > 20_000) recentPushes.removeFirst()
+            if (recentPushes.size >= 10) {
+                needsPush = false
+                _status.value = Status.Synced(now)
+                return
+            }
+            recentPushes.addLast(now)
+        }
         needsPush = true
         pushJob?.cancel()
         pushJob = scope.launch {
