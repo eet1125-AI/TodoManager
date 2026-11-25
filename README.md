@@ -37,13 +37,15 @@ On your phone open **https://github.com/eet1125-AI/TodoManager/releases/latest**
 
 The reader understands checkboxes (☐ ☑ [ ] [x]), bullets, numbering, "– URGENT", and headings like BUSINESS TASKS / PERSONAL TASKS. Checked-off items are marked and skipped by default.
 
-## Sync phone and tablet (Google Drive)
+## Sync phone and tablet (Firebase)
 
-1. **First device:** tap the **sync** icon (two arrows, top bar) → **First device: create the sync file**. In the file screen tap ☰ → **Drive**, then **Save**. This makes `Eric-ToDo-sync.json` in your Drive.
-2. **Each other device:** install the app, tap the sync icon → **Already set up on another device: choose the file** → ☰ → **Drive** → tap `Eric-ToDo-sync.json`.
-3. From then on, tap **sync** on any device (it also syncs when you open the app). Changes from every device are merged: new tasks are added, the newest edit or checkmark wins, deleted tasks disappear everywhere, and the most recent drag-to-reorder sets the order.
+1. **First device:** Settings → **Sync phone & tablet** → enter your email and a password → **Create account**.
+2. **Every other device:** same email and password → **Sign in**. The first time, both lists are combined (use **Find duplicates** to tidy doubles).
+3. That's it. Every change is sent within a second and shows up on the other device by itself. The sync icon (two arrows) forces a sync; Settings shows "Up to date" and the time.
 
-Each device keeps its own copy, so the app works offline; sync when you're back online. Settings → Google Drive sync shows the last sync time and has **Choose file again** / **Stop syncing**.
+Each device keeps its own copy, so the app works with no signal and catches up when it's back online. Rules: newest change wins, deletions apply everywhere, the most recent drag sets the order.
+
+Setup (done once): Firebase project with Email/Password sign-in and a Firestore database; `app/google-services.json` from that project is in this repo. Without that file the app builds but sync stays off.
 
 ## AI helper (optional, Google Gemini)
 
@@ -57,7 +59,7 @@ Long-press an empty spot on the home screen → **Widgets** → **Eric's To-Do**
 
 ## Settings
 
-Text size (Small → Giant; also "Smaller text / Bigger text" in the main ⋮ menu), light or dark background, AI key and model, **Google Drive sync**, **Save backup / Restore** (without sync, tasks live only on the phone; uninstalling deletes them).
+Text size (Small → Giant; also "Smaller text / Bigger text" in the main ⋮ menu), light or dark background, AI key and model, **Sync phone & tablet**, **Save backup / Restore** (without sync, tasks live only on the phone; uninstalling deletes them).
 
 ## Project layout
 
@@ -67,7 +69,7 @@ app/src/main/java/com/eric/todo/
   AppViewModel.kt          import: read text/photos, AI, build the check list
   data/TaskStore.kt        tasks.json storage, merge, reorder, undo
   data/SyncMerge.kt        how phone + tablet changes are combined (tested in app/src/test)
-  sync/DriveSync.kt        reads/writes the shared file in Google Drive
+  sync/CloudSync.kt        live sync through Firebase (sign-in + online database)
   data/Settings.kt         settings
   importer/TextParser.kt   turns pasted/OCR text into tasks
   importer/Dupes.kt        "same task?" matching
