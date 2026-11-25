@@ -89,7 +89,16 @@ object TaskStore {
         save(ordered)
         _tasks.value = ordered
         runCatching { TaskWidget.refresh(context.applicationContext) }
+        runCatching { onLocalChange?.invoke() }
     }
+
+    /** Called after every change made on this device (cloud sync sends it). */
+    @Volatile var onLocalChange: (() -> Unit)? = null
+
+    /** Same list in the order this app keeps it, for comparing two states. */
+    fun normalized(state: SyncState): SyncState = state.copy(
+        tasks = state.tasks.filter { !it.done } + state.tasks.filter { it.done }.sortedByDescending { it.doneAt },
+    )
 
     private fun save(list: List<Task>) {
         val f = file!!
@@ -102,7 +111,7 @@ object TaskStore {
         }
     }
 
-    // ---- Drive sync -------------------------------------------------------
+    // ---- Sync (phone + tablet) ---------------------------------------------
 
     @Synchronized
     fun syncState(context: Context): SyncState {

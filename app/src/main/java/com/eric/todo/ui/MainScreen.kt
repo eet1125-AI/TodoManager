@@ -188,13 +188,13 @@ fun MainScreen(
                         if (syncing) {
                             androidx.compose.material3.CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.5.dp)
                         } else {
-                            Icon(painterResource(R.drawable.ic_sync), "Sync with Google Drive", Modifier.size(28.dp))
+                            Icon(painterResource(R.drawable.ic_sync), "Sync phone and tablet", Modifier.size(28.dp))
                         }
                     }
                     Box {
                         IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "More", Modifier.size(30.dp)) }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                            BigMenuItem("Sync with Google Drive") { menu = false; onSync() }
+                            BigMenuItem("Sync now") { menu = false; onSync() }
                             BigMenuItem("Find duplicates") { menu = false; onDuplicates() }
                             BigMenuItem("Share this list") { menu = false; onShare() }
                             BigMenuItem("Urgent to the top") {

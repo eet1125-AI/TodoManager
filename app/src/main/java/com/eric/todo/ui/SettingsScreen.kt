@@ -68,9 +68,6 @@ fun SettingsScreen(
     keyCheck: String?,
     onTestKey: () -> Unit,
     onSyncNow: () -> Unit,
-    onSyncSetup: () -> Unit,
-    onSyncStop: () -> Unit,
-    syncing: Boolean,
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -194,48 +191,8 @@ fun SettingsScreen(
             )
 
             HorizontalDivider()
-            Section("Google Drive sync")
-            if (values.syncUri.isBlank()) {
-                Text(
-                    "Keep the same list on your phone and tablet. The list is saved in one file in your Google Drive; " +
-                        "tap Sync on any device to send and get changes.",
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-                Button(onClick = onSyncSetup, modifier = Modifier.fillMaxWidth().height(56.dp)) {
-                    Text("Set up Drive sync", fontSize = 17.sp)
-                }
-            } else {
-                Text(
-                    "Syncing with: ${values.syncName.ifBlank { "Drive file" }}\n" +
-                        "Last synced: " + (if (values.lastSync == 0L) "never"
-                        else SimpleDateFormat("EEE, MMM d 'at' h:mm a", Locale.getDefault()).format(Date(values.lastSync))),
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-                Button(onClick = onSyncNow, enabled = !syncing, modifier = Modifier.fillMaxWidth().height(56.dp)) {
-                    Text(if (syncing) "Syncing…" else "Sync now", fontSize = 17.sp)
-                }
-                Row(
-                    Modifier.fillMaxWidth(),
-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                ) {
-                    Text("Sync when the app opens", Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-                    androidx.compose.material3.Switch(checked = values.autoSync, onCheckedChange = { settings.setAutoSync(it) })
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedButton(onClick = onSyncSetup, modifier = Modifier.weight(1f).height(56.dp)) {
-                        Text("Choose file again", fontSize = 15.sp)
-                    }
-                    OutlinedButton(onClick = onSyncStop, modifier = Modifier.weight(1f).height(56.dp)) {
-                        Text("Stop syncing", fontSize = 15.sp)
-                    }
-                }
-                Text(
-                    "Tip: tap Sync on the device you just used, then on the other one. Your list stays on this device too, " +
-                        "so it works with no signal.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            Section("Sync phone & tablet")
+            SyncSection()
 
             HorizontalDivider()
             Section("App updates")

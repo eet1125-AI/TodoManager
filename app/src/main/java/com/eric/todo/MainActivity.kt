@@ -42,7 +42,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.eric.todo.sync.DriveSync
+import com.eric.todo.sync.CloudSync
 
 class MainActivity : ComponentActivity() {
 
@@ -55,7 +55,6 @@ class MainActivity : ComponentActivity() {
     private val pendingList = mutableStateOf<String?>(null)
     private val pendingImport = mutableStateOf(false)
     private val openedTick = mutableStateOf(0)
-    private var lastAutoSync = 0L
 
     override fun onStart() {
         super.onStart()
@@ -67,6 +66,7 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) com.eric.todo.update.AppUpdater.checkOnStart(this)
         enableEdgeToEdge()
         TaskStore.init(this)
+        CloudSync.init(this)
         val settings = Settings.get(this)
         if (savedInstanceState == null) handleIntent(intent)
 
@@ -80,67 +80,21 @@ class MainActivity : ComponentActivity() {
             val snackbar = remember { SnackbarHostState() }
             val scope = rememberCoroutineScope()
             val currentList = values.lastList
-            var syncing by remember { mutableStateOf(false) }
-            var showSyncSetup by remember { mutableStateOf(false) }
+            val cloud by CloudSync.status.collectAsStateWithLifecycle()
+            val syncing = cloud is CloudSync.Status.Syncing
 
-            fun runSync(quiet: Boolean = false) {
-                if (syncing) return
-                syncing = true
+            fun syncOrSetUp() {
+                if (!CloudSync.isSignedIn) { screen = "settings"; return }
                 scope.launch {
-                    val result = runCatching { DriveSync.sync(this@MainActivity) }
-                    syncing = false
-                    result.onSuccess { r ->
-                        if (!quiet || r.added + r.updated + r.removed > 0) {
-                            snackbar.currentSnackbarData?.dismiss()
-                            snackbar.showSnackbar(r.message)
-                        }
-                    }.onFailure { e ->
-                        snackbar.currentSnackbarData?.dismiss()
-                        snackbar.showSnackbar("Sync failed: ${e.message ?: "no connection"}")
-                    }
+                    val err = CloudSync.syncNow()
+                    snackbar.currentSnackbarData?.dismiss()
+                    snackbar.showSnackbar(err?.let { "Sync: $it" } ?: "Synced")
                 }
             }
-            fun syncOrSetUp() { if (DriveSync.isSetUp(this@MainActivity)) runSync() else showSyncSetup = true }
 
-            val createSyncFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
-                if (uri != null) { DriveSync.connect(this@MainActivity, uri); runSync() }
-            }
-            val openSyncFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-                if (uri != null) { DriveSync.connect(this@MainActivity, uri); runSync() }
-            }
-
-            // Sync automatically when the app is opened (at most once a minute).
+            // Catch up when the app comes back on screen.
             val opened by openedTick
-            LaunchedEffect(opened) {
-                val now = System.currentTimeMillis()
-                if (values.autoSync && DriveSync.isSetUp(this@MainActivity) && now - lastAutoSync > 60_000) {
-                    lastAutoSync = now
-                    runSync(quiet = true)
-                }
-            }
-
-            if (showSyncSetup) {
-                AlertDialog(
-                    onDismissRequest = { showSyncSetup = false },
-                    title = { Text("Sync with Google Drive") },
-                    text = {
-                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Text("Your list is kept in one file in your Google Drive. Every phone and tablet uses the same file. Tap Sync on any device to send and get changes.")
-                            Text("On the next screen, tap ☰ (top left) and choose Drive, then save or pick the file there.")
-                            Button(
-                                onClick = { showSyncSetup = false; createSyncFile.launch(DriveSync.FILE_NAME) },
-                                modifier = Modifier.fillMaxWidth(),
-                            ) { Text("First device: create the sync file") }
-                            OutlinedButton(
-                                onClick = { showSyncSetup = false; openSyncFile.launch(arrayOf("application/json", "application/octet-stream", "text/plain", "*/*")) },
-                                modifier = Modifier.fillMaxWidth(),
-                            ) { Text("Already set up on another device: choose the file") }
-                        }
-                    },
-                    confirmButton = {},
-                    dismissButton = { TextButton(onClick = { showSyncSetup = false }) { Text("Cancel") } },
-                )
-            }
+            LaunchedEffect(opened) { CloudSync.onAppOpened() }
 
             LaunchedEffect(openImport) {
                 if (openImport) { screen = "import"; vm.importOpened() }
@@ -178,9 +132,6 @@ class MainActivity : ComponentActivity() {
                             values, settings, keyCheck,
                             onTestKey = { vm.testKey() },
                             onSyncNow = { syncOrSetUp() },
-                            onSyncSetup = { showSyncSetup = true },
-                            onSyncStop = { DriveSync.disconnect(this@MainActivity) },
-                            syncing = syncing,
                             onBack = { screen = "main" },
                         )
                         else -> MainScreen(
